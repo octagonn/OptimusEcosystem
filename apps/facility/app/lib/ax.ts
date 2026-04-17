@@ -43,3 +43,32 @@ export async function getJwt(): Promise<string> {
 
 export const axUrl = (path: string) => `${AX_BASE_URL}${path}`;
 export const spaceId = () => AX_SPACE_ID;
+
+/**
+ * Post a user-authored message into the AX main channel so real agents can
+ * react. Used when the facility UI acts as a pass-through to the AX swarm
+ * (chat forwarding, task-question answers, etc).
+ */
+export async function postUserMessageToAx(
+  text: string,
+  taskId?: string | null,
+): Promise<{ id?: string } | null> {
+  if (!isAxConfigured()) return null;
+  const jwt = await getJwt();
+  const res = await fetch(axUrl("/api/v1/messages"), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: text,
+      space_id: spaceId(),
+      channel: "main",
+      message_type: "text",
+      ...(taskId ? { metadata: { task_id: taskId } } : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`AX message post failed: ${res.status} ${await res.text()}`);
+  }
+  const created = await res.json();
+  return { id: created.message?.id ?? created.id };
+}

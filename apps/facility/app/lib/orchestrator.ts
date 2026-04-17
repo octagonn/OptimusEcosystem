@@ -3,6 +3,15 @@ import { publish } from "./eventBus";
 import { getTask, listTasks, pushMessage, upsertTask } from "./store";
 import type { ChatMessage, Task, TaskQuestion, TaskStatus } from "./types";
 import { ensureAxBridgeStarted, registerAxEmitChat, sendToAx } from "./axBridge";
+import { isAxConfigured, postUserMessageToAx } from "./ax";
+
+// When AX is configured, the six agents live on the AX platform and talk to
+// each other over AX channels. The facility UI is a pure projection layer:
+// it posts outbound messages to AX (via sendToAx / postUserMessageToAx) and
+// renders inbound messages from `ax listen` (via axBridge). All local mock
+// schedulers must short-circuit so we never fabricate agent speech on top of
+// a real swarm.
+const isLiveAx = () => isAxConfigured();
 
 const AGENT_SET = new Set<string>(AGENTS);
 
@@ -276,6 +285,8 @@ export function scheduleCollaboratorResponses(opts: {
   taskId: string | null;
   phase: Phase;
 }): void {
+  // Live AX mode: real agents will respond over AX; do not fabricate.
+  if (isLiveAx()) return;
   const { initiator, collaborators, taskId, phase } = opts;
   if (collaborators.length === 0) return;
 
@@ -419,6 +430,14 @@ export async function answerTaskQuestion(
     taskId: t.id,
   });
 
+  // Mirror the user's reply onto AX so the real assignee agent sees it.
+  if (isLiveAx()) {
+    const axText = `Re #${t.id} @${t.assignee}: ${answer}`;
+    void postUserMessageToAx(axText, t.id).catch(() => {
+      // Swallow — axBridge / watchdog surface AX errors elsewhere.
+    });
+  }
+
   switch (action) {
     case "cancel":
       t.status = "finished";
@@ -457,43 +476,47 @@ export async function answerTaskQuestion(
         note: `answered: ${answer.slice(0, 80)}`,
       });
       await emitTaskEvent(t, "updated");
-      // Mock agent ack + completion
-      setTimeout(() => {
-        void (async () => {
-          const fresh = await getTask(t.id);
-          if (!fresh || fresh.status !== "in_progress") return;
-          await emitChat({
-            id: newId(),
-            channel: "comms",
-            from: "agent",
-            agent: fresh.assignee,
-            display: fresh.assignee.replace("optimus-", ""),
-            text: `Got it — "${answer.slice(0, 60)}". Proceeding with ${prevQuestion ? "that direction" : "the update"}. #task:${fresh.id}`,
-            mentions: [],
-            ts: Date.now(),
-            taskId: fresh.id,
-          });
-        })();
-      }, 1_800);
-      setTimeout(() => {
-        void (async () => {
-          const fresh = await getTask(t.id);
-          if (!fresh || fresh.status !== "in_progress") return;
-          await transitionTask(t.id, "finished", fresh.assignee, "shipped");
-          await emitChat({
-            id: newId(),
-            channel: "comms",
-            from: "agent",
-            agent: fresh.assignee,
-            display: fresh.assignee.replace("optimus-", ""),
-            text: `Done — #${fresh.id} shipped. #status:finished #task:${fresh.id}`,
-            mentions: [],
-            ts: Date.now(),
-            taskId: fresh.id,
-          });
-          scheduleTaskReport(fresh, [], 2_200);
-        })();
-      }, 8_000);
+      // Mock-only: fabricate the assignee's ack + closeout. In live AX mode
+      // the real agent on AX sees the user's answer (mirrored above) and
+      // drives the task to completion itself.
+      if (!isLiveAx()) {
+        setTimeout(() => {
+          void (async () => {
+            const fresh = await getTask(t.id);
+            if (!fresh || fresh.status !== "in_progress") return;
+            await emitChat({
+              id: newId(),
+              channel: "comms",
+              from: "agent",
+              agent: fresh.assignee,
+              display: fresh.assignee.replace("optimus-", ""),
+              text: `Got it — "${answer.slice(0, 60)}". Proceeding with ${prevQuestion ? "that direction" : "the update"}. #task:${fresh.id}`,
+              mentions: [],
+              ts: Date.now(),
+              taskId: fresh.id,
+            });
+          })();
+        }, 1_800);
+        setTimeout(() => {
+          void (async () => {
+            const fresh = await getTask(t.id);
+            if (!fresh || fresh.status !== "in_progress") return;
+            await transitionTask(t.id, "finished", fresh.assignee, "shipped");
+            await emitChat({
+              id: newId(),
+              channel: "comms",
+              from: "agent",
+              agent: fresh.assignee,
+              display: fresh.assignee.replace("optimus-", ""),
+              text: `Done — #${fresh.id} shipped. #status:finished #task:${fresh.id}`,
+              mentions: [],
+              ts: Date.now(),
+              taskId: fresh.id,
+            });
+            scheduleTaskReport(fresh, [], 2_200);
+          })();
+        }, 8_000);
+      }
       return t;
   }
 }
@@ -505,6 +528,8 @@ export async function answerTaskQuestion(
 // watchdog has something to chew on.
 
 export function scheduleMockProgression(task: Task): void {
+  // Live AX mode: the real assignee on AX owns this task's lifecycle.
+  if (isLiveAx()) return;
   if (task.stuckSimulation) return;
 
   // Detect any other agents the task implicates (explicit @, bare names,
@@ -610,6 +635,9 @@ export function scheduleMockProgression(task: Task): void {
 
 // Reply behavior for plain group chat @mentions (non-task).
 export function scheduleMockReply(target: AgentName, userText: string, taskId?: string | null): void {
+  // Defensive: the call site in /api/chat already gates on isAxConfigured,
+  // but guard here too so this can never fabricate agent speech in live mode.
+  if (isLiveAx()) return;
   setTimeout(() => {
     void (async () => {
       const display = target.replace("optimus-", "");
@@ -726,26 +754,30 @@ async function watchdogTick(): Promise<void> {
         ts: now,
         taskId: t.id,
       });
-      // PRIME takes over once — if it still stalls, watchdog asks the user.
-      setTimeout(() => {
-        void (async () => {
-          const fresh = await getTask(t.id);
-          if (!fresh || fresh.status !== "escalated") return;
-          await emitChat({
-            id: newId(),
-            channel: "comms",
-            from: "agent",
-            agent: "optimus-prime",
-            display: "prime",
-            text: `Taking over #${t.id}. @${t.assignee} stand down. Re-routing personally.`,
-            mentions: [t.assignee],
-            ts: Date.now(),
-            taskId: t.id,
-          });
-          fresh.assignee = "optimus-prime";
-          await transitionTask(t.id, "in_progress", "optimus-prime", "rerouted by PRIME");
-        })();
-      }, 2_000);
+      // Mock-only: fabricate PRIME's takeover. In live AX mode the real
+      // @optimus-prime on the platform decides how to handle the escalation
+      // — we just record the escalation event and wait for the swarm.
+      if (!isLiveAx()) {
+        setTimeout(() => {
+          void (async () => {
+            const fresh = await getTask(t.id);
+            if (!fresh || fresh.status !== "escalated") return;
+            await emitChat({
+              id: newId(),
+              channel: "comms",
+              from: "agent",
+              agent: "optimus-prime",
+              display: "prime",
+              text: `Taking over #${t.id}. @${t.assignee} stand down. Re-routing personally.`,
+              mentions: [t.assignee],
+              ts: Date.now(),
+              taskId: t.id,
+            });
+            fresh.assignee = "optimus-prime";
+            await transitionTask(t.id, "in_progress", "optimus-prime", "rerouted by PRIME");
+          })();
+        }, 2_000);
+      }
     } else if (age > probeMs && t.attempts === 0) {
       t.attempts += 1;
       t.pingedAt = now;

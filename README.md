@@ -10,9 +10,9 @@
                     E C O S Y S T E M
 ```
 
-### A gamified living-world dashboard for the AX-powered Optimus agent swarm.
+### A procedurally-rendered facility where six AX agents talk to each other.
 
-**Your phone is the command line. The desktop is the god-view.**
+**You watch. You command. They work.**
 
 <br />
 
@@ -36,19 +36,12 @@
 
 ## 🎯 Why this exists
 
-Most agent swarms give you a terminal. That's fine for engineers. It's terrible for **feeling** what six agents are doing at 2am while you're on the couch.
+Most agent swarms give you a terminal. That's fine for engineers — it's terrible for *feeling* what six agents are doing at 2am.
 
-Optimus Ecosystem splits the problem into **two surfaces, one protocol**:
-
-|    | Surface | Role |
-|----|---------|------|
-| 📱 | **Mobile (Telegram)** | Command line, reborn as a chat. Write to the swarm from anywhere. |
-| 🖥️ | **Desktop (facility UI)** | Observability surface. *Watch* the swarm work in a procedurally-rendered Ultron-style facility that reacts to real AX events in real time. |
-
-Both talk to the same backbone — [AX Platform](https://next.paxai.app) + the `ax` CLI. No parallel protocols, no second auth layer, no message bus to maintain.
+Optimus Ecosystem renders the swarm as a **living facility**. Six AX agents live in six procedurally-rendered rooms. They talk to each other over the [AX Platform](https://next.paxai.app) — and you watch it happen, in motion, with shader-tuned readability and room-specific ambient life. When you want to jump in, you type into the comms feed and your message joins the same AX stream the agents use.
 
 > [!NOTE]
-> **The desktop is never the input device. The phone is never the display.** That split makes each side simpler.
+> **AX is the agents' bus.** The six agents use AX Platform channels to coordinate with each other — `@optimus-prime` asks `@optimus-forge` to build something, `@optimus-nova` posts research, etc. The facility UI is a *projection* of that stream, not a separate protocol.
 
 ---
 
@@ -70,22 +63,30 @@ Six AX agents. Six procedural rooms. One locked color palette.
 ## 🧬 How it works
 
 ```
-   ┌──────────────────┐         ┌──────────────────┐         ┌──────────────────┐
-   │   📱 Telegram    │────────▶│   🛰️  AX Platform │◀────────│   🖥️  Facility UI │
-   │     gateway      │         │    (ax CLI)      │         │  apps/facility   │
-   └──────────────────┘         └──────────────────┘         └──────────────────┘
-            ▲                            ▲                            │
-            │                            │                            ▼
-            └──────────── you ───────────┘                   PixiJS v8 renderer
-                                                          (procedural SDF rooms
-                                                           + CRT + bloom + grain)
+                      ┌────────────────────────────────┐
+                      │     🛰️  AX Platform (bus)      │
+                      │  agents talk to each other     │
+                      │   @prime ↔ @forge ↔ @nova …    │
+                      └────────────────────────────────┘
+                         ▲          ▲          ▲
+                         │          │          │
+       ┌─────────────────┼──────────┼──────────┼──────────────────┐
+       │                 │          │          │                  │
+       ▼                 ▼          ▼          ▼                  ▼
+  ┌─────────┐      ┌─────────┐ ┌─────────┐ ┌─────────┐      ┌─────────┐
+  │  prime  │      │  forge  │ │  anvil  │ │  scout  │ ...  │  🖥️  UI  │
+  │ (agent) │      │ (agent) │ │ (agent) │ │ (agent) │      │ facility │
+  └─────────┘      └─────────┘ └─────────┘ └─────────┘      └─────────┘
+                                                                  ▲
+                                                                  │
+                                                                 you
 ```
 
-Three invariants you can rely on:
-
-- 🟢 **AX is the source of truth.** The UI is a state projection layer, never a parallel store.
+- 🟢 **AX is the source of truth.** Agent ↔ agent coordination flows over AX channels.
+- 🟢 **The UI is a projection layer.** It subscribes to the AX stream and renders it as a world.
+- 🟢 **The human joins the same stream.** Typing in the facility's comms feed posts to AX; agents reply through AX; the renderer picks up the events.
 - 🟢 **Reply correlation via `reply_to`** — no content sniffing, no polling hacks.
-- 🟢 **120s hard timeout** on any round-trip; beyond that we show a "still thinking" fallback.
+- 🟢 **120s hard timeout** on any round-trip; beyond that the UI shows a "still thinking" fallback.
 
 ---
 
@@ -278,9 +279,6 @@ OptimusEcosystem/
 │       └── public/assets/     🖼️  Agent portraits, room thumbnails
 ├── packages/
 │   └── shared/                📦 Shared TypeScript types + agent registry
-├── services/
-│   └── gateway/               📱 Python Telegram bridge   (Phase 2, planned)
-├── scripts/                   🐚 WSL dispatch + activity tailer   (Phase 3, planned)
 ├── docs/                      📘 Design-spec markdown
 ├── PLAN.md                    📋 The master design document
 └── README.md                  👋 You are here.
@@ -373,11 +371,10 @@ See [PLAN.md §8](./PLAN.md) for the full story.
 
 - [x] **Phase 0** — Scaffolding ✅
 - [ ] **Phase 1** — Graphics proof-of-concept (one room, full post-FX chain) — *← current gate*
-- [ ] **Phase 2** — Telegram gateway (`bot.py`, systemd, mobile → swarm roundtrip)
-- [ ] **Phase 3** — Activity feed (NDJSON tailer → SSE → scene)
-- [ ] **Phase 4** — All 6 rooms + agents rigged to real AX events
-- [ ] **Phase 5** — Swarm board as in-world overlay
-- [ ] **Phase 6** — Gamification (kanban, XP, procedural events)
+- [ ] **Phase 2** — Activity feed (AX event stream → SSE → scene)
+- [ ] **Phase 3** — All 6 rooms + agents rigged to real AX events
+- [ ] **Phase 4** — Swarm board as in-world overlay (rate meters, token warnings, pause)
+- [ ] **Phase 5** — Gamification (kanban, XP, procedural events, sound design)
 
 ---
 
@@ -390,8 +387,8 @@ See [PLAN.md §8](./PLAN.md) for the full story.
 
 ```bash
 # Find the process
-lsof -i :3100          # macOS/Linux
-netstat -ano | findstr :3100   # Windows
+lsof -i :3100                      # macOS/Linux
+netstat -ano | findstr :3100       # Windows
 
 # Or override
 PORT=3200 pnpm dev
@@ -407,8 +404,8 @@ PORT=3200 pnpm dev
 You're on an older Node.js. Upgrade to Node 20+:
 
 ```bash
-node --version          # check
-nvm install 20 && nvm use 20   # if using nvm
+node --version                     # check
+nvm install 20 && nvm use 20       # if using nvm
 ```
 
 </details>

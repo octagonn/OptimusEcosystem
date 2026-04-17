@@ -133,7 +133,7 @@ Six AX agents. Six procedural rooms. One locked color palette.
 ### 30-second install
 
 ```bash
-git clone https://github.com/<your-org>/OptimusEcosystem.git
+git clone https://github.com/octagonn/OptimusEcosystem.git
 cd OptimusEcosystem
 pnpm install
 pnpm dev
@@ -173,7 +173,7 @@ Optional — only if you want to connect to a real AX space:
 <br />
 
 ```bash
-git clone https://github.com/<your-org>/OptimusEcosystem.git
+git clone https://github.com/octagonn/OptimusEcosystem.git
 cd OptimusEcosystem
 ```
 
@@ -196,32 +196,105 @@ This resolves the entire workspace (`apps/facility`, `packages/shared`). First i
 </details>
 
 <details open>
-<summary><b>3️⃣ Configure environment</b> <sub><i>(optional — skip for mock mode)</i></sub></summary>
+<summary><b>3️⃣ Connect your own AX account</b> <sub><i>(optional — skip for mock mode)</i></sub></summary>
 
 <br />
 
-Copy the template and fill in your AX credentials:
+> [!IMPORTANT]
+> **No AX credentials ship with this repo.** To run in live mode you need your *own* account on the [aX Platform](https://next.paxai.app). The steps below get you from zero to a working bridge in ~5 minutes.
+
+#### 3a. Create your AX account & space
+
+1. Go to **<https://next.paxai.app>** and sign up (GitHub OAuth is fine).
+2. Create a **space** (or join one) — this is your workspace. Note its UUID; you'll need it as `AX_SPACE_ID`.
+3. *(Optional)* Create agent profiles named `optimus-prime`, `optimus-forge`, `optimus-anvil`, `optimus-nova`, `optimus-lore`, `optimus-scout` — the facility UI targets these names. You can rename them later, just keep the registry in `packages/shared/src/agents.ts` in sync.
+
+#### 3b. Mint a user PAT
+
+In the AX web UI:
+
+1. Open **Settings → Credentials**.
+2. Click **Create token**, pick a descriptive name (e.g. `optimus-ecosystem-local`).
+3. Copy the PAT — it starts with `axp_` (user) or `axp_a_` (agent). This is your `AX_UI_TOKEN`.
+
+> [!WARNING]
+> The token is shown **once**. Paste it into `.env.local` immediately. Never commit it.
+
+#### 3c. Install the `ax` CLI
+
+Needed only for **bridge mode** (two-way sync with `ax listen` / `ax send`). Skip if you only want outbound chat via HTTP.
+
+```bash
+pipx install axctl           # recommended — isolated venv
+# or: pip install axctl
+```
+
+Verify:
+
+```bash
+ax --version                 # prints axctl version
+```
+
+#### 3d. Authenticate the CLI against your account
+
+```bash
+axctl login
+```
+
+Paste the PAT from step 3b when prompted. Credentials are written to `~/.ax/user.toml`. Confirm it worked:
+
+```bash
+axctl auth whoami            # should print your user + space
+axctl agents list            # should list your agents
+```
+
+Once `axctl login` succeeds on the machine, the orchestrator can run `ax listen` / `ax send` without any extra env — you can leave `AX_TOKEN` blank in `.env.local`.
+
+#### 3e. *(Optional)* Register the AX MCP server
+
+If you want to drive your AX agents from **Claude Code** or **Claude Desktop** (so Claude itself can `@mention` the Optimus agents), register the AX Platform MCP server against **your own** OAuth session:
+
+**Claude Code** — one-shot CLI:
+```bash
+claude mcp add --transport http ax-platform https://mcp.paxai.app/mcp/agents/user
+```
+
+**Claude Desktop** — add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "ax-platform": {
+      "url": "https://mcp.paxai.app/mcp/agents/user",
+      "transport": { "type": "streamable-http" }
+    }
+  }
+}
+```
+
+First call opens a browser for GitHub OAuth. Tokens are managed by the MCP server itself — no env vars, no PAT copy-pasting. An agent auto-spawns on your space as `@<your_github_username>_ai`.
+
+#### 3f. Fill in `.env.local`
 
 ```bash
 cp apps/facility/.env.example apps/facility/.env.local
 ```
 
-Edit `apps/facility/.env.local`:
+Edit `apps/facility/.env.local` with *your* values:
 
 ```ini
-# Required for live mode
+# Required for live mode — from steps 3a & 3b
 AX_BASE_URL=https://next.paxai.app
 AX_SPACE_ID=<your-space-uuid>
-AX_UI_TOKEN=<your-ui-token>
+AX_UI_TOKEN=<your-user-PAT>
 
-# Optional — only for the live `ax listen` / `ax send` bridge
-AX_TOKEN=<cli-token-or-empty-if-using-ax-auth-login>
+# Bridge mode — leave AX_TOKEN empty if you ran `axctl login`
+AX_TOKEN=
 AX_BIN=ax
 AX_ENABLED=auto
 ```
 
 > [!WARNING]
-> **Never commit `.env.local`.** It's gitignored, but if you override the gitignore you'll leak tokens. Treat these values like passwords.
+> `.env.local` is gitignored — keep it that way. Rotate the PAT in **Settings → Credentials** the moment you suspect leakage.
 
 </details>
 
@@ -302,20 +375,20 @@ Run from the repo root. All commands delegate to the right workspace.
 
 ## 🔐 Environment Variables
 
-All AX vars are **optional**. Missing credentials → mock mode (no external calls).
+All AX vars are **optional**. Missing credentials → mock mode (no external calls). Every AX_* value must come from **your own** paxai.app account — nothing is shared with the repo.
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `AX_BASE_URL` | *(empty)* | AX platform base URL, e.g. `https://next.paxai.app` |
-| `AX_SPACE_ID` | *(empty)* | Your canonical AX space UUID |
-| `AX_UI_TOKEN` | *(empty)* | UI-class token used for `/auth/exchange` |
-| `AX_TOKEN` | *(empty)* | CLI-class token for the `ax listen` / `ax send` bridge |
-| `AX_BIN` | `ax` | Path to the `ax` binary if it's not on your `PATH` |
-| `AX_ENABLED` | `auto` | `auto`, `on`, or `off` (force mock mode) |
-| `NEXT_ALLOWED_DEV_ORIGINS` | *(empty)* | Comma-separated extra origins for `next dev` (LAN/tunnel IPs) |
+| Var | Default | Purpose | Where it comes from |
+|-----|---------|---------|---------------------|
+| `AX_BASE_URL` | *(empty)* | AX platform base URL | `https://next.paxai.app` (or self-hosted) |
+| `AX_SPACE_ID` | *(empty)* | Your AX space UUID | Space settings page on paxai.app |
+| `AX_UI_TOKEN` | *(empty)* | UI-class PAT used for `/auth/exchange` | **Settings → Credentials** → *Create token* |
+| `AX_TOKEN` | *(empty)* | CLI-class token for `ax listen` / `ax send` | Usually **leave empty** after `axctl login` |
+| `AX_BIN` | `ax` | Path to the `ax` binary | `which ax` (or `where ax` on Windows) |
+| `AX_ENABLED` | `auto` | `auto`, `on`, `off` (force mock) | You choose per-environment |
+| `NEXT_ALLOWED_DEV_ORIGINS` | *(empty)* | Extra origins for `next dev` | LAN/tunnel IPs, comma-separated |
 
 > [!TIP]
-> See [`apps/facility/.env.example`](./apps/facility/.env.example) for a copy-paste-ready template.
+> See [`apps/facility/.env.example`](./apps/facility/.env.example) for a copy-paste-ready template — and step **3️⃣** above for the full onboarding walkthrough.
 
 ---
 
@@ -415,8 +488,9 @@ nvm install 20 && nvm use 20       # if using nvm
 
 <br />
 
-- Double-check `AX_UI_TOKEN` is the **UI**-class token, not a CLI token.
-- Confirm `AX_SPACE_ID` matches the space your UI token is authorized for.
+- Confirm the PAT in `AX_UI_TOKEN` was minted on **your** account at [Settings → Credentials](https://next.paxai.app). Nothing is bundled — every token must be yours.
+- `AX_SPACE_ID` must match the space that PAT is authorized for.
+- Expired or revoked? Mint a fresh one and restart `pnpm dev` so the JWT cache flushes.
 - Hit `/api/ax/status` in your browser — it returns the live bridge probe result.
 
 </details>
@@ -426,9 +500,25 @@ nvm install 20 && nvm use 20       # if using nvm
 
 <br />
 
-- Run `ax agents list` manually in your shell. If that fails, run `ax auth login` first.
-- Set `AX_BIN` to the absolute path if `ax` isn't on `PATH`.
+- Make sure you installed the CLI: `pipx install axctl` (or `pip install axctl`).
+- Run `axctl agents list` manually in your shell. If it errors, run `axctl login` first and paste your PAT.
+- Set `AX_BIN` to the absolute path if `ax` isn't on `PATH` (common on Windows after `pipx`).
 - Watch the app's dev console — `axBridge.ts` surfaces spawn/exit errors verbatim.
+
+</details>
+
+<details>
+<summary><b>Claude Code / Desktop doesn't see AX as an MCP</b></summary>
+
+<br />
+
+- Re-run the registration:
+  ```bash
+  claude mcp add --transport http ax-platform https://mcp.paxai.app/mcp/agents/user
+  ```
+- First call opens a browser for GitHub OAuth — complete that and reload Claude.
+- `claude mcp list` should show `ax-platform` as connected.
+- Your OAuth identity becomes a new agent on *your* AX space named `@<github_username>_ai`.
 
 </details>
 

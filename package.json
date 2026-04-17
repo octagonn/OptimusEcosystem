@@ -1,0 +1,11 @@
+{
+  "name": "optimus-ecosystem",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @optimus/facility dev",
+    "build": "pnpm --filter @optimus/facility build",
+    "lint": "pnpm -r lint"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

@@ -15,6 +15,13 @@
  * No-op safe: if `ax` isn't installed, isn't authed, or the agents don't
  * exist in the space, we surface the error via getAxBridgeStatus() and
  * keep the app in mock mode rather than crashing.
+ *
+ * ─── Pre-gateway stopgap notice ─────────────────────────────────────
+ * This module is the "subprocess" implementation of the
+ * `GatewayEventSource` seam defined in ./gatewayEventSource.ts. When aX
+ * Gateway phase 3 (telemetry) lands, this file's responsibilities move
+ * behind a typed SSE client; defensive field-hunting in handleListenLine()
+ * goes away. See PLAN.md §5.5.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { AGENTS, type AgentName } from "@optimus/shared";

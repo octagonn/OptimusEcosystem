@@ -15,6 +15,17 @@ Three surfaces, one protocol:
 
 The desktop is never the input device anymore; it is the observability surface. The phone is never the display; it is the input. This split makes each side simpler.
 
+### Positioning vs aX Gateway (upstream execution plane)
+
+The aX team is building a separate product — **aX Gateway** — that will sit on each device as the trust anchor for agent execution (credential broker, work-lease queue, policy gate, 11-method protocol, fleet telemetry). Optimus Ecosystem is **not** an implementation of that plane; it is a **consumer** of it.
+
+Today Optimus shells out to `ax listen --json` per agent (subprocess bridge via `axBridge.ts`). Once aX Gateway phase 3 (telemetry) lands, the subprocess path gets swapped for a gateway SSE/event client — same event shape, no PAT in runtime config, no per-agent subprocess. The facility UI is the "dashboard skin" over whichever surface the gateway exposes.
+
+This means:
+- Today's `AX_UI_TOKEN` user PAT is a **pre-gateway stopgap**. Vision slide 4 of the aX Gateway deck forbids it; we accept the stopgap until the gateway credential broker exists.
+- `axBridge.ts` should expose a swappable event-source seam so the future gateway client slots in without touching the rest of the app.
+- The six Transformers agent names stay — they are *display roles*, not infrastructure primitives.
+
 ---
 
 ## 1.5. Carry-over from OptimusFacility (non-negotiable)
@@ -237,7 +248,9 @@ Phase 1 is a spike: render ONE room + ONE agent with the full stack. If it doesn
 
 ---
 
-## 5. Telegram Gateway
+## 5. Mobile Bridge (Telegram)
+
+> **Naming note.** This section is about the **Telegram→AX mobile bridge**, not the aX Gateway execution plane. To avoid collision with the upstream aX Gateway product, the seventh agent profile keeps its historical name `optimus-gateway` but this bridge is scoped to mobile I/O only. aX Gateway integration is §5.5.
 
 ### AX side — one new agent, `optimus-gateway`
 Adding exactly **one** seventh agent (not six-parallel — just the bridge). Why a dedicated agent rather than user-PAT shelling to `ax send`:
@@ -273,6 +286,43 @@ Minted via **AX MCP** `agents.create` (not the `ax` CLI, per corrected flow — 
 
 ---
 
+## 5.5. aX Gateway integration (consumer role)
+
+aX Gateway is the upstream local-execution plane aX is building: one daemon per device, credential broker, work-lease queue, policy gate, 11-method agent protocol, SLA telemetry. Optimus is a **consumer** — when the gateway lands, Optimus swaps its current subprocess bridge for a gateway event-source client. No protocol of our own.
+
+### Current state (pre-gateway)
+- `apps/facility/app/lib/axBridge.ts` spawns `ax listen --json --agent <name>` per agent and parses NDJSON.
+- `apps/facility/app/lib/ax.ts` exchanges `AX_UI_TOKEN` (user PAT) at `AX_BASE_URL/auth/exchange` for a cached bearer JWT.
+- Lifecycle model: 4 states (`idle | listening | processing | replied`).
+- SLA metrics: none collected.
+
+### Target state (post-gateway, consumer)
+- `axBridge.ts` exposes a `GatewayEventSource` interface with two implementations:
+  - `SubprocessEventSource` — current `ax listen` path (pre-gateway fallback).
+  - `GatewaySSEEventSource` — connects to the local gateway's SSE endpoint on `localhost` via mTLS, consumes the 11-method protocol as typed events.
+- No PATs in `.env.local`. The gateway holds the only user credential; scoped 15m JWTs are minted per agent instance by the gateway, never touched by the UI.
+- `AgentState` union expanded to cover gateway lifecycle states we need to *render* (at minimum: `blocked`, `degraded`, `reconnecting`, `failed` in addition to today's four). Internal gateway states like `Registered`/`Starting` don't need UI representation; we add only what the facility visualizes.
+- SLA metrics surface in the sidebar/HUD: `queue_depth`, `p95_handle_time`, `work_ack_rate`, `agents_online`. Stub with placeholders now; wire when gateway phase 3 ships.
+
+### Alignment with aX Gateway phases
+| aX Gateway phase | Optimus impact |
+|---|---|
+| Phase 1 — daemon | Subprocess bridge still used; no Optimus change. |
+| Phase 2 — creds | Ready to retire `AX_UI_TOKEN`; gateway mints scoped JWTs. Update `.env` handling. |
+| Phase 3 — telemetry | Swap `axBridge.ts` implementation to SSE consumer. Wire metric placeholders to real values. |
+| Phase 4 — leases | Render lease state in the activity feed (ACK/progress/complete/timeout/requeue). |
+| Phase 5 — MCP mode | No direct impact (gateway-internal). |
+| Phase 6 — fleet | Optional: expand facility to render multi-device fleets. Keep deferred. |
+
+### What Optimus does NOT implement
+- No local gateway daemon, Control API, Supervisor, Credential Broker, or Policy Gate.
+- No 11-method protocol server.
+- No gateway CLI (`ax gateway agents add/bootstrap/start`). That lives in `ax-cli`.
+
+This keeps Optimus' scope as *visualization + mobile bridge*, not agent infrastructure.
+
+---
+
 ## 6. AX Integration
 
 ### Carried over unchanged from the existing swarm
@@ -303,7 +353,7 @@ Reference: https://github.com/ax-platform/ax-cli. The CLI has grown since Optimu
 ### Alternative / complementary integration paths (documented, not default)
 We stay on the `ax` CLI by default (boss requirement), but we document the alternatives so the ecosystem can grow into them:
 
-- **`ax-platform-mcp`** — Remote MCP over HTTP Streamable + OAuth 2.1 at `https://next.paxai.app/mcp/agents/{agent_name}`. Useful if we ever want Claude Code itself to speak as an agent without the CLI.
+- **`ax-platform-mcp`** — Remote MCP over HTTP Streamable + OAuth 2.1 at `https://paxai.app/mcp/agents/{agent_name}`. Useful if we ever want Claude Code itself to speak as an agent without the CLI.
 - **Claude Code Channel (`ax-channel`)** — bun-based MCP SDK bridge; reference pattern for any future non-CLI integration surface.
 - **`ax-openclaw-plugin`** — if OpenClaw becomes an Optimus participant, this plug-in is the supported bridge rather than a bespoke shim.
 
@@ -480,6 +530,7 @@ These are auto-loaded per user's CLAUDE.md. I'll invoke them explicitly at the r
 5. **Monorepo overhead** — pnpm workspaces are light. Worth it for shared types and coordinated deploys.
 6. **License for vendored assets** — Pixel Agents is MIT; if we adopt any furniture PNGs, attribute and track in `docs/attribution.md`.
 7. **Mobile web parity (future)** — a responsive mobile web UI might eventually want the same god-view. Out of scope for v1.
+8. **aX Gateway alignment** — until the gateway ships, we run on a user PAT (`AX_UI_TOKEN`) and subprocess `ax listen`. Both are stopgaps the gateway replaces. Risk: event-shape drift between our defensive parser and the eventual gateway protocol. Mitigation: keep `axBridge.ts` behind a `GatewayEventSource` interface from day one so the swap is a single file.
 
 ---
 

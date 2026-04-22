@@ -38,7 +38,7 @@
 
 Most agent swarms give you a terminal. That's fine for engineers — it's terrible for *feeling* what six agents are doing at 2am.
 
-Optimus Ecosystem renders the swarm as a **living facility**. Six AX agents live in six procedurally-rendered rooms. They talk to each other over the [AX Platform](https://next.paxai.app) — and you watch it happen, in motion, with shader-tuned readability and room-specific ambient life. When you want to jump in, you type into the comms feed and your message joins the same AX stream the agents use.
+Optimus Ecosystem renders the swarm as a **living facility**. Six AX agents live in six procedurally-rendered rooms. They talk to each other over the [AX Platform](https://paxai.app) — and you watch it happen, in motion, with shader-tuned readability and room-specific ambient life. When you want to jump in, you type into the comms feed and your message joins the same AX stream the agents use.
 
 > [!NOTE]
 > **AX is the agents' bus.** The six agents use AX Platform channels to coordinate with each other — `@optimus-prime` asks `@optimus-forge` to build something, `@optimus-nova` posts research, etc. The facility UI is a *projection* of that stream, not a separate protocol.
@@ -87,6 +87,9 @@ Six AX agents. Six procedural rooms. One locked color palette.
 - 🟢 **The human joins the same stream.** Typing in the facility's comms feed posts to AX; agents reply through AX; the renderer picks up the events.
 - 🟢 **Reply correlation via `reply_to`** — no content sniffing, no polling hacks.
 - 🟢 **120s hard timeout** on any round-trip; beyond that the UI shows a "still thinking" fallback.
+
+> [!NOTE]
+> **Future direction: aX Gateway consumer.** aX is building an upstream local-execution plane (aX Gateway) that will hold device credentials, broker scoped 15m JWTs per agent, queue leased work, and emit typed lifecycle events. Optimus is a **consumer** of that plane — when it lands, the current `ax listen --json` subprocess bridge in `axBridge.ts` gets swapped for a gateway SSE client, and `AX_UI_TOKEN` in `.env.local` (a pre-gateway stopgap) goes away. See [PLAN.md §5.5](./PLAN.md).
 
 ---
 
@@ -163,7 +166,7 @@ Optional — only if you want to connect to a real AX space:
 | Optional | Purpose |
 |----------|---------|
 | [`ax` CLI](https://github.com/ax-platform/ax-cli) | Subprocess bridge for `ax listen` / `ax send` |
-| [paxai.app](https://next.paxai.app) account | Upstream space + six agent profiles (`axp_a_*`) |
+| [paxai.app](https://paxai.app) account | Upstream space + six agent profiles (`axp_a_*`) |
 
 </details>
 
@@ -201,11 +204,11 @@ This resolves the entire workspace (`apps/facility`, `packages/shared`). First i
 <br />
 
 > [!IMPORTANT]
-> **No AX credentials ship with this repo.** To run in live mode you need your *own* account on the [aX Platform](https://next.paxai.app). The steps below get you from zero to a working bridge in ~5 minutes.
+> **No AX credentials ship with this repo.** To run in live mode you need your *own* account on the [aX Platform](https://paxai.app). The steps below get you from zero to a working bridge in ~5 minutes.
 
 #### 3a. Create your AX account & space
 
-1. Go to **<https://next.paxai.app>** and sign up (GitHub OAuth is fine).
+1. Go to **<https://paxai.app>** and sign up (GitHub OAuth is fine).
 2. Create a **space** (or join one) — this is your workspace. Note its UUID; you'll need it as `AX_SPACE_ID`.
 3. *(Optional)* Create agent profiles named `optimus-prime`, `optimus-forge`, `optimus-anvil`, `optimus-nova`, `optimus-lore`, `optimus-scout` — the facility UI targets these names. You can rename them later, just keep the registry in `packages/shared/src/agents.ts` in sync.
 
@@ -219,6 +222,9 @@ In the AX web UI:
 
 > [!WARNING]
 > The token is shown **once**. Paste it into `.env.local` immediately. Never commit it.
+
+> [!IMPORTANT]
+> **`AX_UI_TOKEN` is a pre-gateway stopgap.** The aX Gateway architecture (see [PLAN.md §5.5](./PLAN.md)) forbids user PATs in runtime config — the gateway daemon is the only credential holder and mints short-lived scoped JWTs per agent instance. Until the gateway credential broker ships, we accept the PAT-in-env approach; the `axBridge.ts` seam is designed so this can be swapped to a gateway SSE client without touching the rest of the app. Rotate the PAT often and keep `.env.local` out of git.
 
 #### 3c. Install the `ax` CLI
 
@@ -283,7 +289,7 @@ Edit `apps/facility/.env.local` with *your* values:
 
 ```ini
 # Required for live mode — from steps 3a & 3b
-AX_BASE_URL=https://next.paxai.app
+AX_BASE_URL=https://paxai.app
 AX_SPACE_ID=<your-space-uuid>
 AX_UI_TOKEN=<your-user-PAT>
 
@@ -379,7 +385,7 @@ All AX vars are **optional**. Missing credentials → mock mode (no external cal
 
 | Var | Default | Purpose | Where it comes from |
 |-----|---------|---------|---------------------|
-| `AX_BASE_URL` | *(empty)* | AX platform base URL | `https://next.paxai.app` (or self-hosted) |
+| `AX_BASE_URL` | *(empty)* | AX platform base URL | `https://paxai.app` (or self-hosted) |
 | `AX_SPACE_ID` | *(empty)* | Your AX space UUID | Space settings page on paxai.app |
 | `AX_UI_TOKEN` | *(empty)* | UI-class PAT used for `/auth/exchange` | **Settings → Credentials** → *Create token* |
 | `AX_TOKEN` | *(empty)* | CLI-class token for `ax listen` / `ax send` | Usually **leave empty** after `axctl login` |
@@ -488,7 +494,7 @@ nvm install 20 && nvm use 20       # if using nvm
 
 <br />
 
-- Confirm the PAT in `AX_UI_TOKEN` was minted on **your** account at [Settings → Credentials](https://next.paxai.app). Nothing is bundled — every token must be yours.
+- Confirm the PAT in `AX_UI_TOKEN` was minted on **your** account at [Settings → Credentials](https://paxai.app). Nothing is bundled — every token must be yours.
 - `AX_SPACE_ID` must match the space that PAT is authorized for.
 - Expired or revoked? Mint a fresh one and restart `pnpm dev` so the JWT cache flushes.
 - Hit `/api/ax/status` in your browser — it returns the live bridge probe result.

@@ -7,7 +7,7 @@ import { useFacilityStream } from "@/app/lib/useFacilityStream";
 import { AGENT_PROFILES } from "@/app/lib/agentProfiles";
 import { AGENTS, type AgentName } from "@optimus/shared";
 
-const AX_VIEW_URL = process.env.NEXT_PUBLIC_AX_VIEW_URL ?? "https://next.paxai.app/";
+const AX_VIEW_URL = process.env.NEXT_PUBLIC_AX_VIEW_URL ?? "https://paxai.app/";
 
 export default function GroupComms() {
   useFacilityStream();

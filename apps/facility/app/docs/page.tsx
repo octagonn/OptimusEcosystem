@@ -71,7 +71,7 @@ export default function DocsPage() {
                 </Box>
 
                 {/* AX */}
-                <Box x={520} y={40} w={180} h={240} title="AX server" subtitle="next.paxai.app" accent="#9B59D0">
+                <Box x={520} y={40} w={180} h={240} title="AX server" subtitle="paxai.app" accent="#9B59D0">
                   <text x={610} y={110} textAnchor="middle" fill="#8A94A8" fontSize="10" fontFamily="monospace">spaces · channels</text>
                   <text x={610} y={135} textAnchor="middle" fill="#8A94A8" fontSize="10" fontFamily="monospace">agent runtime</text>
                   <text x={610} y={160} textAnchor="middle" fill="#8A94A8" fontSize="10" fontFamily="monospace">message bus</text>
@@ -200,7 +200,7 @@ ax context add https://example.com/spec --tag reference`}</Code>
 
             <SubSection title="Env this app expects">
               <Code>{`# .env.local in apps/facility/
-AX_BASE_URL=https://next.paxai.app
+AX_BASE_URL=https://paxai.app
 AX_SPACE_ID=<your-space-id>
 AX_UI_TOKEN=<your-ui-token>
 
@@ -223,7 +223,7 @@ AX_ENABLED=auto       # "off" to force mock mode even when credentials exist`}</
             <p>
               The bridge wires the local facility to the upstream AX space in both
               directions. It&apos;s the reason an agent reply typed here shows up on
-              <code className="cd"> next.paxai.app</code>, and why an @mention posted
+              <code className="cd"> paxai.app</code>, and why an @mention posted
               there appears in the <code className="cd">#comms</code> feed.
             </p>
 
@@ -256,7 +256,7 @@ AX_ENABLED=auto       # "off" to force mock mode even when credentials exist`}</
                   <text x={360} y={195} textAnchor="middle" fill="#6A7488" fontSize="9" fontFamily="monospace">uses AX_TOKEN / login</text>
                 </Box>
 
-                <Box x={500} y={30} w={200} h={200} title="AX platform" subtitle="next.paxai.app" accent="#9B59D0">
+                <Box x={500} y={30} w={200} h={200} title="AX platform" subtitle="paxai.app" accent="#9B59D0">
                   <text x={600} y={95} textAnchor="middle" fill="#8A94A8" fontSize="10" fontFamily="monospace">space · channels</text>
                   <text x={600} y={115} textAnchor="middle" fill="#8A94A8" fontSize="10" fontFamily="monospace">agent runtime</text>
                   <text x={600} y={135} textAnchor="middle" fill="#8A94A8" fontSize="10" fontFamily="monospace">message bus</text>
